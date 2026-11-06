@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Business Copilot</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand-mark">✦</div>
+      <div><p class="eyebrow">GROQ + N8N AUTOMATION</p><h1>AI Business Copilot</h1></div>
+      <span class="status"><i></i> Ready to analyze</span>
+    </header>
+    <section class="hero">
+      <p class="eyebrow">CUSTOMER OPERATIONS, SIMPLIFIED</p>
+      <h2>Turn every customer message<br><span>into an actionable insight.</span></h2>
+      <p class="sub">AI-powered classification, sentiment detection, priority routing and response drafting — in one workflow.</p>
+    </section>
+    <section class="workspace">
+      <form id="requestForm" class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">NEW REQUEST</p><h3>Analyze a customer message</h3></div><span class="step">01 / INPUT</span></div>
+        <label for="customerName">Customer name</label>
+        <input id="customerName" name="customerName" placeholder="e.g. Alex Morgan" value="Alex Morgan">
+        <div class="two">
+          <div><label for="email">Email address</label><input id="email" name="email" type="email" placeholder="alex@example.com"></div>
+          <div><label for="channel">Channel</label><select id="channel" name="channel"><option>Website</option><option>Email</option><option>WhatsApp</option><option>Live Chat</option></select></div>
+        </div>
+        <label for="message">Customer message <b>*</b></label>
+        <textarea id="message" name="message" rows="6" required placeholder="Describe the customer's issue, question or feedback..."></textarea>
+        <button id="submitBtn" type="submit"><span>Analyze with AI</span><span>↗</span></button>
+        <p class="hint">Your message is sent to your n8n webhook for processing.</p>
+      </form>
+      <section class="panel result-panel" id="resultPanel">
+        <div class="panel-heading"><div><p class="eyebrow">AI ANALYSIS</p><h3>Insights & recommended action</h3></div><span class="step">02 / RESULT</span></div>
+        <div id="emptyState" class="empty"><div class="empty-icon">✧</div><h4>Waiting for a request</h4><p>Submit a customer message to see its AI-generated analysis here.</p></div>
+        <div id="result" class="result hidden"></div>
+      </section>
+    </section>
+    <footer>Built with n8n · Groq · Google Sheets <span>AI-assisted decisions. Human-owned outcomes.</span></footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

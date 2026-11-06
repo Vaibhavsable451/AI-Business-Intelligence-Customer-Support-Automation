@@ -1,0 +1,659 @@
+{
+  "name": "AI Business Copilot - Groq + Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-business-copilot",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "node-01-webhook",
+      "name": "1. Incoming Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "ai-business-copilot-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst text = String(body.message ?? body.query ?? '').trim();\nreturn [{json: {message: text, customerName: String(body.customerName ?? 'Guest').trim(), email: String(body.email ?? '').trim(), channel: String(body.channel ?? 'Website').trim(), receivedAt: new Date().toISOString()}}];"
+      },
+      "id": "node-02-normalize",
+      "name": "2. Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid-message",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-03-validate",
+      "name": "3. Validate Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Please provide a message.' } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "node-04-invalid",
+      "name": "4. Return Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        660,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.GROQ_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: 'llama-3.3-70b-versatile', temperature: 0.2, max_tokens: 700, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'You are an enterprise customer-support triage assistant. Analyze the request and return ONLY valid JSON with keys: category, sentiment, priority, summary, recommended_action, reply. category must be one of Billing, Technical, Account, Product, Other. sentiment must be Positive, Neutral, or Negative. priority must be High, Medium, or Low. Keep summary and recommended_action concise. Write a helpful professional customer reply.' }, { role: 'user', content: 'Customer: ' + $('2. Normalize Request').item.json.customerName + '\\nChannel: ' + $('2. Normalize Request').item.json.channel + '\\nRequest: ' + $('2. Normalize Request').item.json.message } ] } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "node-05-groq",
+      "name": "5. Groq AI Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('2. Normalize Request').item.json;\nconst raw = $json.choices?.[0]?.message?.content ?? '{}';\nlet ai;\ntry { ai = JSON.parse(raw); } catch (e) { ai = {category:'Other', sentiment:'Neutral', priority:'Medium', summary:source.message.slice(0,180), recommended_action:'Review the request manually.', reply:'Thank you for contacting us. Our team will review your request and get back to you.'}; }\nconst allowed = ['High','Medium','Low'];\nconst priority = allowed.includes(ai.priority) ? ai.priority : 'Medium';\nreturn [{json:{...source, category:ai.category ?? 'Other', sentiment:ai.sentiment ?? 'Neutral', priority, summary:ai.summary ?? '', recommendedAction:ai.recommended_action ?? '', reply:ai.reply ?? '', aiRaw:raw}}];"
+      },
+      "id": "node-06-parse",
+      "name": "6. Parse AI Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "High",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "High"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "Medium",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Medium"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "Low",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Low"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-07-router",
+      "name": "7. Priority Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1120,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sla-high",
+              "name": "sla",
+              "value": "Immediate - human review",
+              "type": "string"
+            },
+            {
+              "id": "queue-high",
+              "name": "queue",
+              "value": "Priority Support",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-08-high",
+      "name": "8. High Priority Handling",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1360,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sla-medium",
+              "name": "sla",
+              "value": "Within 1 business day",
+              "type": "string"
+            },
+            {
+              "id": "queue-medium",
+              "name": "queue",
+              "value": "Standard Support",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-09-medium",
+      "name": "9. Medium Priority Handling",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1360,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sla-low",
+              "name": "sla",
+              "value": "Within 3 business days",
+              "type": "string"
+            },
+            {
+              "id": "queue-low",
+              "name": "queue",
+              "value": "General Support",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-10-low",
+      "name": "10. Low Priority Handling",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1360,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 3,
+        "options": {}
+      },
+      "id": "node-11-merge",
+      "name": "11. Merge Priority Paths",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1600,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sheet-name",
+              "name": "customerName",
+              "value": "={{ $json.customerName }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-email",
+              "name": "email",
+              "value": "={{ $json.email }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-channel",
+              "name": "channel",
+              "value": "={{ $json.channel }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-message",
+              "name": "message",
+              "value": "={{ $json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-category",
+              "name": "category",
+              "value": "={{ $json.category }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-sentiment",
+              "name": "sentiment",
+              "value": "={{ $json.sentiment }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-priority",
+              "name": "priority",
+              "value": "={{ $json.priority }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-summary",
+              "name": "summary",
+              "value": "={{ $json.summary }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-action",
+              "name": "recommendedAction",
+              "value": "={{ $json.recommendedAction }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-reply",
+              "name": "reply",
+              "value": "={{ $json.reply }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-sla",
+              "name": "sla",
+              "value": "={{ $json.sla }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-queue",
+              "name": "queue",
+              "value": "={{ $json.queue }}",
+              "type": "string"
+            },
+            {
+              "id": "sheet-date",
+              "name": "receivedAt",
+              "value": "={{ $json.receivedAt }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-12-sheet-row",
+      "name": "12. Prepare Google Sheets Row",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1820,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Requests",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "node-13-sheets",
+      "name": "13. Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2040,
+        220
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('12. Prepare Google Sheets Row').item.json;\nreturn [{json:{success:true, customerName:d.customerName, category:d.category, sentiment:d.sentiment, priority:d.priority, summary:d.summary, recommendedAction:d.recommendedAction, reply:d.reply, sla:d.sla, queue:d.queue, loggedToGoogleSheets:true, receivedAt:d.receivedAt}}];"
+      },
+      "id": "node-14-response",
+      "name": "14. Build API Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2260,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-15-respond",
+      "name": "15. Return Result to Frontend",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2480,
+        220
+      ]
+    }
+  ],
+  "connections": {
+    "1. Incoming Webhook": {
+      "main": [
+        [
+          {
+            "node": "2. Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "3. Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Validate Input": {
+      "main": [
+        [
+          {
+            "node": "5. Groq AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "4. Return Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Groq AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "6. Parse AI Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Parse AI Result": {
+      "main": [
+        [
+          {
+            "node": "7. Priority Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Priority Router": {
+      "main": [
+        [
+          {
+            "node": "8. High Priority Handling",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "9. Medium Priority Handling",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "10. Low Priority Handling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. High Priority Handling": {
+      "main": [
+        [
+          {
+            "node": "11. Merge Priority Paths",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Medium Priority Handling": {
+      "main": [
+        [
+          {
+            "node": "11. Merge Priority Paths",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "10. Low Priority Handling": {
+      "main": [
+        [
+          {
+            "node": "11. Merge Priority Paths",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "11. Merge Priority Paths": {
+      "main": [
+        [
+          {
+            "node": "12. Prepare Google Sheets Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12. Prepare Google Sheets Row": {
+      "main": [
+        [
+          {
+            "node": "13. Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13. Save to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "14. Build API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14. Build API Response": {
+      "main": [
+        [
+          {
+            "node": "15. Return Result to Frontend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
